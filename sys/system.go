@@ -690,7 +690,7 @@ func (sys *System) GetCachedLocations(ctx *Context) []string {
 	cls := sys.CachedLocations
 	cls.Lock()
 	acc := make([]string, 0, len(cls.locs))
-	for name, _ := range cls.locs {
+	for name := range cls.locs {
 		acc = append(acc, name)
 	}
 	cls.Unlock()
@@ -1254,6 +1254,8 @@ func (sys *System) SearchRules(ctx *Context, location string, event string, incl
 }
 
 func (sys *System) ProcessEvent(ctx *Context, location string, event string) (*FindRules, error) {
+	ctx = ctx.StartSpan("System.ProcessEvent")
+	defer ctx.StopSpan()
 
 	m, err := ParseMap(event)
 	if err != nil {
