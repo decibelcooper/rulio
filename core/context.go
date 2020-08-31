@@ -226,6 +226,7 @@ func (ctx *Context) SubContext() *Context {
 		App:                 ctx.App,
 		privilege:           ctx.privilege,
 		Context:             ctx.Context,
+		Tracer:              ctx.Tracer,
 	}
 
 	sub.SetLoc(ctx.GetLoc())
