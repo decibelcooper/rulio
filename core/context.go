@@ -199,7 +199,9 @@ func newContext(appId string) *Context {
 		LogAccumulator:      nil,
 		LogAccumulatorLevel: ANYWARN,
 		LogHook:             nil,
-		PointHook:           nil}
+		PointHook:           nil,
+		Context:             context.Background(),
+	}
 	ctx.init()
 	// We really don't like gratuitous dots in properties because
 	// they cause unncessary trouble in downstream processing.
