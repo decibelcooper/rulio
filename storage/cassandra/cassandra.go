@@ -52,6 +52,7 @@ type CassandraDBConfig struct {
 	username       string
 	password       string
 	keyspace       string
+	timeout        time.Duration
 	backoffRetries int
 	backoffMin     time.Duration
 	backoffMax     time.Duration
@@ -66,6 +67,7 @@ func ParseConfig(config string) (*CassandraDBConfig, error) {
 	user := ""
 	pass := ""
 	ks := ""
+	timeout := time.Second
 	backoffRetries := 4
 	backoffMin := 100 * time.Millisecond
 	backoffMax := 10 * time.Second
@@ -94,21 +96,28 @@ func ParseConfig(config string) (*CassandraDBConfig, error) {
 	}
 
 	if 4 < len(parts) && parts[4] != "" {
-		backoffRetries, err = strconv.Atoi(parts[4])
+		timeout, err = time.ParseDuration(parts[4])
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if 5 < len(parts) && parts[5] != "" {
-		backoffMin, err = time.ParseDuration(parts[5])
+		backoffRetries, err = strconv.Atoi(parts[5])
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if 6 < len(parts) && parts[6] != "" {
-		backoffMax, err = time.ParseDuration(parts[6])
+		backoffMin, err = time.ParseDuration(parts[6])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if 7 < len(parts) && parts[7] != "" {
+		backoffMax, err = time.ParseDuration(parts[7])
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +128,7 @@ func ParseConfig(config string) (*CassandraDBConfig, error) {
 		username:       user,
 		password:       pass,
 		keyspace:       ks,
+		timeout:        timeout,
 		backoffRetries: backoffRetries,
 		backoffMin:     backoffMin,
 		backoffMax:     backoffMax,
@@ -159,6 +169,7 @@ func (s *CassStorage) init(ctx *Context, config CassandraDBConfig) error {
 			Password: config.password,
 		}
 	}
+	s.cluster.Timeout = config.timeout
 	s.cluster.RetryPolicy = &gocql.ExponentialBackoffRetryPolicy{
 		config.backoffRetries,
 		config.backoffMin,
