@@ -21,8 +21,10 @@ package cassandra
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocql/gocql"
 
@@ -46,20 +48,27 @@ type CassStorage struct {
 // This name stutters because it's convenient to dot-import core,
 // which defines 'Storage'.
 type CassandraDBConfig struct {
-	nodes    []string
-	username string
-	password string
-	keyspace string
+	nodes          []string
+	username       string
+	password       string
+	keyspace       string
+	backoffRetries int
+	backoffMin     time.Duration
+	backoffMax     time.Duration
 }
 
 // ParseConfig generates a CassandraDBConfig from a string.
 // Configuration is parsed from a string of the follow format:
 // host:port,host:port;username;password;keyspace
 func ParseConfig(config string) (*CassandraDBConfig, error) {
+	var err error
 	var ns []string
 	user := ""
 	pass := ""
 	ks := ""
+	backoffRetries := 4
+	backoffMin := 100 * time.Millisecond
+	backoffMax := 10 * time.Second
 
 	parts := strings.SplitN(config, ";", 4)
 
@@ -84,11 +93,35 @@ func ParseConfig(config string) (*CassandraDBConfig, error) {
 		ks = parts[3]
 	}
 
+	if 4 < len(parts) && parts[4] != "" {
+		backoffRetries, err = strconv.Atoi(parts[4])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if 5 < len(parts) && parts[5] != "" {
+		backoffMin, err = time.ParseDuration(parts[5])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if 6 < len(parts) && parts[6] != "" {
+		backoffMax, err = time.ParseDuration(parts[6])
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	c := CassandraDBConfig{
-		nodes:    ns,
-		username: user,
-		password: pass,
-		keyspace: ks,
+		nodes:          ns,
+		username:       user,
+		password:       pass,
+		keyspace:       ks,
+		backoffRetries: backoffRetries,
+		backoffMin:     backoffMin,
+		backoffMax:     backoffMax,
 	}
 
 	return &c, nil
@@ -125,6 +158,11 @@ func (s *CassStorage) init(ctx *Context, config CassandraDBConfig) error {
 			Username: config.username,
 			Password: config.password,
 		}
+	}
+	s.cluster.RetryPolicy = &gocql.ExponentialBackoffRetryPolicy{
+		config.backoffRetries,
+		config.backoffMin,
+		config.backoffMax,
 	}
 	// How to create Cassandra data structures.
 
@@ -185,16 +223,20 @@ func (s *CassStorage) init(ctx *Context, config CassandraDBConfig) error {
 func (s *CassStorage) Load(ctx *Context, loc string) ([]Pair, error) {
 	Log(INFO, ctx, "CassStorage.Load", "location", loc)
 
-	iter := s.session.Query(`SELECT data FROM locstate WHERE loc = ?`, loc).Iter()
+	q := s.session.Query(`SELECT data FROM locstate WHERE loc = ?`, loc)
 	acc := make([]Pair, 0, 1024)
 
 	var pairs map[string]string
 
-	if iter.Scan(&pairs) {
+	if err := q.Scan(&pairs); err == nil {
 		for k, v := range pairs {
 			d := Pair{[]byte(k), []byte(v)}
 			Log(DEBUG, ctx, "CassStorage.Load", "pair", d)
 			acc = append(acc, d)
+		}
+	} else {
+		if err != gocql.ErrNotFound {
+			return nil, fmt.Errorf("failed to scan cassandra DB: %w", err)
 		}
 	}
 
