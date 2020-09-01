@@ -158,7 +158,7 @@ func NewStorage(ctx *Context, config CassandraDBConfig) (*CassStorage, error) {
 }
 
 func (s *CassStorage) init(ctx *Context, config CassandraDBConfig) error {
-	Log(INFO, ctx, "CassStorage.init", "config", config)
+	Log(INFO, ctx, "CassStorage.init", "config", &config)
 
 	// ToDo: Expose more/better Cass connection parameters
 	s.cluster = gocql.NewCluster(config.nodes...)
